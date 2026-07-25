@@ -1,5 +1,9 @@
 fileFormatVersion: 2
-guid: abb0abc2e5ce448dca7f237ab6483d37
+<<<<<<< HEAD:Assets/Models/Vegetacion/diffuse 3.tga.meta
+guid: 07b1b84f81e984c82b5c661342f9b90a
+=======
+guid: 3b8d11c54e5d9ab85bb10d9735090fd9
+>>>>>>> 2614b2a (Prefab zona 1 y entorno):Assets/Models/Vegetacion/HedgeLongRound_normal.tga.meta
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}

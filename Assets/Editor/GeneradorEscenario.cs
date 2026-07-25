@@ -1,11 +1,14 @@
 using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 public class GeneradorEscenario : EditorWindow
 {
     private float tamanoEscenario = 50f;
     private float separacion = 2f;
+    private bool soloModelosGrandes = true;
+    private float probabilidadDetalle = 0.15f;
 
     [MenuItem("Herramientas/Generar Escenario 50x50")]
     private static void Init()
@@ -20,6 +23,11 @@ public class GeneradorEscenario : EditorWindow
         GUILayout.Label("Configuración del Escenario", EditorStyles.boldLabel);
         tamanoEscenario = EditorGUILayout.FloatField("Tamaño Escenario", tamanoEscenario);
         separacion = EditorGUILayout.FloatField("Separación", separacion);
+        soloModelosGrandes = EditorGUILayout.Toggle("Solo modelos principales (sin detalle)", soloModelosGrandes);
+        if (!soloModelosGrandes)
+        {
+            probabilidadDetalle = EditorGUILayout.Slider("Probabilidad detalle (NN_d/s/t)", probabilidadDetalle, 0.05f, 0.5f);
+        }
 
         if (GUILayout.Button("Generar Escenario"))
         {
@@ -32,10 +40,11 @@ public class GeneradorEscenario : EditorWindow
         GameObject contenedor = new GameObject("Escenario_Generado");
         CrearSuelo(contenedor);
 
-        string[] modelos = ObtenerModelos();
-        if (modelos.Length == 0)
+        string[] modelosGrandes, modelosMedianos, modelosDetalle;
+        ObtenerModelosSeparados(out modelosGrandes, out modelosMedianos, out modelosDetalle);
+        if (modelosGrandes.Length == 0 && modelosMedianos.Length == 0)
         {
-            Debug.LogError("No hay modelos .obj en Assets/Models/Vegetacion");
+            Debug.LogError("No hay modelos en Assets/Models/Vegetacion");
             return;
         }
 
@@ -48,7 +57,9 @@ public class GeneradorEscenario : EditorWindow
         GenerarCaminosRamificados(esCamino, celdasPorLado);
 
         Random.InitState(System.DateTime.Now.Millisecond);
-        int indiceModelo = 0;
+        int contGrandes = 0;
+        int contMedianos = 0;
+        int contDetalle = 0;
 
         for (int x = 0; x < celdasPorLado; x++)
         {
@@ -63,7 +74,7 @@ public class GeneradorEscenario : EditorWindow
                     piso.name = $"Camino_{x}_{z}";
                     piso.transform.SetParent(contenedor.transform);
                     piso.transform.position = new Vector3(posX, 0.01f, posZ);
-                    piso.transform.localScale = new Vector3(separacion * 0.4f, 0.05f, separacion * 0.4f);
+                    piso.transform.localScale = new Vector3(separacion * 2.0f, 0.05f, separacion * 2.0f);
                     Renderer r = piso.GetComponent<Renderer>();
                     r.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
                     r.sharedMaterial.color = new Color(0.3f, 0.25f, 0.2f);
@@ -71,8 +82,29 @@ public class GeneradorEscenario : EditorWindow
                 }
                 else
                 {
-                    string modelo = modelos[indiceModelo % modelos.Length];
-                    indiceModelo++;
+                    string modelo;
+                    bool adyacente = EsAdyacenteACamino(esCamino, x, z, celdasPorLado);
+
+                    if (adyacente && modelosMedianos.Length > 0)
+                    {
+                        modelo = modelosMedianos[Random.Range(0, modelosMedianos.Length)];
+                        contMedianos++;
+                    }
+                    else if (!soloModelosGrandes && modelosDetalle.Length > 0 && Random.value < probabilidadDetalle)
+                    {
+                        modelo = modelosDetalle[Random.Range(0, modelosDetalle.Length)];
+                        contDetalle++;
+                    }
+                    else if (modelosGrandes.Length > 0)
+                    {
+                        modelo = modelosGrandes[Random.Range(0, modelosGrandes.Length)];
+                        contGrandes++;
+                    }
+                    else
+                    {
+                        modelo = modelosMedianos[Random.Range(0, modelosMedianos.Length)];
+                        contMedianos++;
+                    }
                     ColocarModelo(contenedor, modelo, new Vector3(posX, 0, posZ));
                 }
             }
@@ -81,7 +113,7 @@ public class GeneradorEscenario : EditorWindow
         string rutaPrefab = "Assets/Prefabs/Entorno/EscenarioGenerado.prefab";
         System.IO.Directory.CreateDirectory("Assets/Prefabs/Entorno");
         PrefabUtility.SaveAsPrefabAsset(contenedor, rutaPrefab);
-        Debug.Log($"Escenario generado: {celdasPorLado}x{celdasPorLado} celdas, {indiceModelo} modelos colocados.");
+        Debug.Log($"Escenario generado: {celdasPorLado}x{celdasPorLado} celdas. Grandes:{contGrandes} Med medianos:{contMedianos} Detalle:{contDetalle}");
 
         Selection.activeObject = AssetDatabase.LoadAssetAtPath<GameObject>(rutaPrefab);
     }
@@ -100,40 +132,27 @@ public class GeneradorEscenario : EditorWindow
 
     private void GenerarCaminosRamificados(bool[,] esCamino, int n)
     {
+        if (n < 3) return;
         int centro = n / 2;
-        Queue<Vector2Int> cola = new Queue<Vector2Int>();
-        esCamino[centro, centro] = true;
-        cola.Enqueue(new Vector2Int(centro, centro));
 
-        int maxCaminos = Mathf.RoundToInt(n * n * 0.25f);
-        int contador = 0;
+        // Camino de entrada: desde el borde izquierdo (x=0) hasta el centro
+        for (int x = 0; x <= centro; x++)
+            esCamino[x, centro] = true;
 
-        Vector2Int[] dirs = {
-            new Vector2Int(1, 0), new Vector2Int(-1, 0),
-            new Vector2Int(0, 1), new Vector2Int(0, -1)
-        };
-
-        while (cola.Count > 0 && contador < maxCaminos)
+        // Rama superior: centro → esquina superior derecha (x=n-1, z=0)
+        for (int x = centro, z = centro; x < n - 1 || z > 0; )
         {
-            Vector2Int actual = cola.Dequeue();
+            if (x < n - 1) x++;
+            if (z > 0) z--;
+            esCamino[x, z] = true;
+        }
 
-            for (int paso = 0; paso < Random.Range(2, 5); paso++)
-            {
-                Vector2Int dir = dirs[Random.Range(0, dirs.Length)];
-                Vector2Int sig = actual + dir;
-
-                if (sig.x < 0 || sig.x >= n || sig.y < 0 || sig.y >= n)
-                    continue;
-                if (esCamino[sig.x, sig.y])
-                    continue;
-
-                esCamino[sig.x, sig.y] = true;
-                cola.Enqueue(sig);
-                actual = sig;
-                contador++;
-
-                if (contador >= maxCaminos) break;
-            }
+        // Rama inferior: centro → esquina inferior derecha (x=n-1, z=n-1)
+        for (int x = centro, z = centro; x < n - 1 || z < n - 1; )
+        {
+            if (x < n - 1) x++;
+            if (z < n - 1) z++;
+            esCamino[x, z] = true;
         }
     }
 
@@ -160,12 +179,13 @@ public class GeneradorEscenario : EditorWindow
         }
 
         string nombre = System.IO.Path.GetFileNameWithoutExtension(rutaModelo).ToLower();
+        AsignarTexturaPorNombre(instancia, nombre);
         float escala = 1f;
 
-        if (nombre.Contains("bamboo"))
-            escala = 0.5f;
-        else if (System.Text.RegularExpressions.Regex.IsMatch(nombre, @"^\d+_[dst]$"))
-            escala = 0.25f;
+        if (nombre.Contains("bamboo") || (nombre.Length <= 2 && RegexNumerico.IsMatch(nombre)))
+            escala = 0.3f;
+        else if (RegexDetalle.IsMatch(nombre))
+            escala = 0.1f;
 
         instancia.transform.SetParent(contenedor.transform);
         instancia.transform.position = posicion;
@@ -192,20 +212,127 @@ public class GeneradorEscenario : EditorWindow
             if (c is MeshCollider mc)
                 mc.convex = true;
         }
+
+        Rigidbody rb = instancia.GetComponent<Rigidbody>();
+        if (rb == null)
+            rb = instancia.AddComponent<Rigidbody>();
+        rb.useGravity = false;
+        rb.isKinematic = true;
     }
 
-    private string[] ObtenerModelos()
+    private static readonly Regex RegexDetalle = new Regex(@"^\d+_[dst]$", RegexOptions.Compiled);
+    private static readonly Regex RegexNumerico = new Regex(@"^\d+$", RegexOptions.Compiled);
+
+    private bool EsAdyacenteACamino(bool[,] esCamino, int x, int z, int n)
+    {
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                if (dx == 0 && dz == 0) continue;
+                int nx = x + dx;
+                int nz = z + dz;
+                if (nx >= 0 && nx < n && nz >= 0 && nz < n && esCamino[nx, nz])
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private void ObtenerModelosSeparados(out string[] grandes, out string[] medianos, out string[] detalle)
     {
         string[] guids = AssetDatabase.FindAssets("t:GameObject", new[] { "Assets/Models/Vegetacion" });
-        List<string> modelos = new List<string>();
+        List<string> listaGrandes = new List<string>();
+        List<string> listaMedianos = new List<string>();
+        List<string> listaDetalle = new List<string>();
 
         foreach (string guid in guids)
         {
             string ruta = AssetDatabase.GUIDToAssetPath(guid);
-            if (ruta.EndsWith(".obj") || ruta.EndsWith(".fbx"))
-                modelos.Add(ruta);
+            if (!ruta.EndsWith(".obj") && !ruta.EndsWith(".fbx"))
+                continue;
+
+            string nombre = System.IO.Path.GetFileNameWithoutExtension(ruta).ToLower();
+            if (RegexDetalle.IsMatch(nombre))
+                listaDetalle.Add(ruta);
+            else if (nombre.Contains("bamboo") || RegexNumerico.IsMatch(nombre))
+                listaMedianos.Add(ruta);
+            else
+                listaGrandes.Add(ruta);
         }
 
-        return modelos.ToArray();
+        grandes = listaGrandes.ToArray();
+        medianos = listaMedianos.ToArray();
+        detalle = listaDetalle.ToArray();
+
+        Debug.Log($"Modelos: {grandes.Length} grandes, {medianos.Length} medianos, {detalle.Length} detalle");
+    }
+
+    private void AsignarTexturaPorNombre(GameObject instancia, string nombreModelo)
+    {
+        string rutaDiffuse = BuscarTexturaTGA(nombreModelo, "diffuse");
+        if (rutaDiffuse == null) return;
+
+        Texture2D texDiffuse = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaDiffuse);
+        if (texDiffuse == null) return;
+
+        string rutaNormal = BuscarTexturaTGA(nombreModelo, "normal");
+
+        Renderer[] renderers = instancia.GetComponentsInChildren<Renderer>();
+        foreach (Renderer r in renderers)
+        {
+            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            mat.mainTexture = texDiffuse;
+            mat.color = Color.white;
+
+            if (rutaNormal != null)
+            {
+                Texture2D texNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaNormal);
+                if (texNormal != null)
+                {
+                    mat.SetTexture("_BumpMap", texNormal);
+                    mat.EnableKeyword("_NORMALMAP");
+                }
+            }
+
+            r.sharedMaterial = mat;
+        }
+    }
+
+    private string BuscarTexturaTGA(string nombreModelo, string sufijo)
+    {
+        string nombreBase = nombreModelo;
+        Match match = Regex.Match(nombreModelo, @"^(\d+)_[dst]$");
+        if (match.Success)
+            nombreBase = match.Groups[1].Value;
+
+        string[] sufijos = sufijo == "diffuse"
+            ? new string[] { "_" + sufijo, "-" + sufijo, "_dffuse" }
+            : new string[] { "_" + sufijo, "-" + sufijo };
+
+        string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { "Assets/Models/Vegetacion" });
+        foreach (string guid in guids)
+        {
+            string ruta = AssetDatabase.GUIDToAssetPath(guid);
+            string nombreTGA = System.IO.Path.GetFileNameWithoutExtension(ruta).ToLower();
+
+            foreach (string s in sufijos)
+            {
+                if (!nombreTGA.EndsWith(s)) continue;
+
+                string nombreSinSufijo = nombreTGA.Substring(0, nombreTGA.Length - s.Length);
+
+                if (nombreSinSufijo == nombreBase)
+                    return ruta;
+
+                if (RegexNumerico.IsMatch(nombreBase))
+                {
+                    string[] partes = nombreSinSufijo.Split('-');
+                    if (System.Array.IndexOf(partes, nombreBase) >= 0)
+                        return ruta;
+                }
+            }
+        }
+        return null;
     }
 }
