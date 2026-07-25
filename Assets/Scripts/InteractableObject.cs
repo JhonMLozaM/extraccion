@@ -46,17 +46,17 @@ public class InteractableObject : MonoBehaviour
 
         tiempoGazeAcumulado += Time.deltaTime;
 
-        float progreso = Mathf.Clamp01(tiempoGazeAcumulado / tiempoRequerido);
-
         if (materialResaltado != null && rendererObjeto != null)
-        {
             rendererObjeto.material = materialResaltado;
-        }
 
         if (tiempoGazeAcumulado >= tiempoRequerido)
-        {
             Activar();
-        }
+    }
+
+    public void ActivarInstantaneo()
+    {
+        if (activado) return;
+        Activar();
     }
 
     public void SalirGaze()
@@ -92,9 +92,7 @@ public class InteractableObject : MonoBehaviour
             }
 
             if (abreSalida)
-            {
                 Debug.Log($"¡{nombreObjeto} ha abierto la salida!");
-            }
         }
 
         if (sonidoActivacion != null && audioSource != null)
@@ -109,14 +107,6 @@ public class InteractableObject : MonoBehaviour
         }
 
         enabled = false;
-    }
-
-    private void OnTriggerExit(Collider other)
-    {
-        if (other.CompareTag("Player") || other.GetComponent<MobileVRCapsuleController>() != null)
-        {
-            SalirGaze();
-        }
     }
 
     private void OnDrawGizmosSelected()

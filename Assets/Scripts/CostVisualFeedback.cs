@@ -21,16 +21,23 @@ public class CostVisualFeedback : MonoBehaviour
         if (volumenGlobal == null)
             volumenGlobal = GetComponent<Volume>();
 
-        if (volumenGlobal == null)
+        if (volumenGlobal == null || volumenGlobal.profile == null)
         {
-            Debug.LogError("CostVisualFeedback: No hay Volume asignado. Asigna el Volume Global de URP.");
+            Debug.LogError("CostVisualFeedback: No hay Volume o perfil asignado.");
             enabled = false;
             return;
         }
 
-        volumenGlobal.profile.TryGet(out vigneta);
-        volumenGlobal.profile.TryGet(out aberracionCromatica);
-        volumenGlobal.profile.TryGet(out ajustesColor);
+        volumenGlobal.profile.TryGet<Vignette>(out vigneta);
+        volumenGlobal.profile.TryGet<ChromaticAberration>(out aberracionCromatica);
+        volumenGlobal.profile.TryGet<ColorAdjustments>(out ajustesColor);
+
+        if (vigneta == null)
+            Debug.LogWarning("CostVisualFeedback: Falta override Vignette en el Volume.");
+        if (aberracionCromatica == null)
+            Debug.LogWarning("CostVisualFeedback: Falta override Chromatic Aberration en el Volume.");
+        if (ajustesColor == null)
+            Debug.LogWarning("CostVisualFeedback: Falta override Color Adjustments en el Volume.");
     }
 
     private void Update()
@@ -50,14 +57,9 @@ public class CostVisualFeedback : MonoBehaviour
         }
 
         if (aberracionCromatica != null)
-        {
             aberracionCromatica.intensity.Override(Mathf.Lerp(0f, intensidadMaxAberracion, nivelCosto));
-        }
 
         if (ajustesColor != null)
-        {
-            float saturacion = Mathf.Lerp(0f, saturacionMinima, nivelCosto);
-            ajustesColor.saturation.Override(saturacion);
-        }
+            ajustesColor.saturation.Override(Mathf.Lerp(0f, saturacionMinima, nivelCosto));
     }
 }

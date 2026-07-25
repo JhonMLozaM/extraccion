@@ -40,11 +40,11 @@ public class GameCostManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
-    public void AplicarCosto(int costVida, float efectoNegativo)
+    public void AplicarCosto(int costoVida, float efectoNegativo)
     {
         float vidaAnterior = vidaActual;
 
-        vidaActual = Mathf.Clamp(vidaActual - costVida, 0, vidaMax);
+        vidaActual = Mathf.Clamp(vidaActual - costoVida, 0, vidaMax);
         poder = Mathf.Clamp(poder - efectoNegativo, 0, poderMax);
         recursos = Mathf.Clamp(recursos - efectoNegativo, 0, recursosMax);
 
@@ -54,14 +54,10 @@ public class GameCostManager : MonoBehaviour
 
         float perdida = vidaAnterior - vidaActual;
         if (perdida > 0)
-        {
             OnEfectoNegativoAplicado?.Invoke(perdida / vidaMax);
-        }
 
         if (vidaActual <= 0)
-        {
             Debug.Log("Game Over: El jugador ha muerto pagando el costo.");
-        }
     }
 
     public void AplicarBeneficio(float beneficioVida, float beneficioPoder, float beneficioRecursos)
