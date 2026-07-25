@@ -7,6 +7,7 @@ public class MobileVRCapsuleController : MonoBehaviour
 {
     [Header("Configuración de Movimiento")]
     [SerializeField] private float velocidadMovimiento = 0.05f;
+    [SerializeField] private float multiplicadorCorrer = 2f;
     [SerializeField] private float sensibilidadMouse = 2f;
 
     [Header("Reticula de Gaze")]
@@ -16,6 +17,10 @@ public class MobileVRCapsuleController : MonoBehaviour
 
     [Header("Opciones VR")]
     [SerializeField] private bool usarXR = true;
+
+    [Header("Gravedad")]
+    [SerializeField] private float gravedad = -9.81f;
+    [SerializeField] private float fuerzaSalto = 5f;
 
     private CharacterController characterController;
     private Camera camaraVR;
@@ -29,6 +34,7 @@ public class MobileVRCapsuleController : MonoBehaviour
     private bool xrActivo;
 
     private UnityEngine.XR.InputDevice xrDispositivo;
+    private float velocidadVertical;
 
     private void Awake()
     {
@@ -201,7 +207,27 @@ public class MobileVRCapsuleController : MonoBehaviour
                 movimiento.Normalize();
         }
 
-        characterController.Move(movimiento * velocidadMovimiento);
+        float velocidadActual = velocidadMovimiento;
+        bool corriendo = !xrActivo && Keyboard.current != null &&
+            (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed);
+        if (corriendo)
+            velocidadActual *= multiplicadorCorrer;
+
+        bool enSuelo = characterController.isGrounded;
+
+        if (enSuelo && velocidadVertical < 0f)
+            velocidadVertical = -2f;
+        else
+            velocidadVertical += gravedad * Time.deltaTime;
+
+        bool saltoPresionado = !xrActivo && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
+        if (enSuelo && saltoPresionado)
+            velocidadVertical = fuerzaSalto;
+
+        Vector3 desplazamiento = movimiento * velocidadActual;
+        desplazamiento.y = velocidadVertical * Time.deltaTime;
+
+        characterController.Move(desplazamiento);
     }
 
     private void DetectarGazeInteraccion()
