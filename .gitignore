@@ -1,0 +1,85 @@
+# ─────────────────────────────────────────────────────────────
+# Unity .gitignore — portable para compartir con el equipo
+# ─────────────────────────────────────────────────────────────
+
+# ============================================
+# Unity generados automáticamente
+# ============================================
+[Ll]ibrary/
+[Tt]emp/
+[Tt]emp-bin/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# ============================================
+# Assets que se regeneran solos
+# ============================================
+Assets/AssetStoreTools*
+
+# ============================================
+# Proyecto / Solución VS / Rider / VSCode
+# ============================================
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.slnx
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opensdf
+*.VC.db
+*.VC.opendb
+*.VC.VC.opendb
+
+# ============================================
+# IDE / Editor
+# ============================================
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================
+# OS
+# ============================================
+.DS_Store
+.DS_Store*
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# ============================================
+# Gradle / Android
+# ============================================
+gradle*
+*.apk
+*.aab
+*.keystore
+local.properties
+*.apk.1
+
+# ============================================
+# Blender / Arte
+# ============================================
+*.blend1
+*.blend2
+*~lock*
+
+# ============================================
+# Crash / Logs
+# ============================================
+crashlytics-*
+fabric-*
+*.log
+*.tlog
