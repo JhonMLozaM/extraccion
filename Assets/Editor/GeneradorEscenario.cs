@@ -76,8 +76,14 @@ public class GeneradorEscenario : EditorWindow
                     piso.transform.position = new Vector3(posX, 0.01f, posZ);
                     piso.transform.localScale = new Vector3(separacion * 2.0f, 0.05f, separacion * 2.0f);
                     Renderer r = piso.GetComponent<Renderer>();
-                    r.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                    r.sharedMaterial.color = new Color(0.3f, 0.25f, 0.2f);
+                    Material mat = ObtenerMaterialSuelo();
+                    if (mat != null)
+                        r.sharedMaterial = mat;
+                    else
+                    {
+                        r.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                        r.sharedMaterial.color = new Color(0.3f, 0.25f, 0.2f);
+                    }
                     Object.DestroyImmediate(piso.GetComponent<Collider>());
                 }
                 else
@@ -118,6 +124,19 @@ public class GeneradorEscenario : EditorWindow
         Selection.activeObject = AssetDatabase.LoadAssetAtPath<GameObject>(rutaPrefab);
     }
 
+    private Material _materialSuelo;
+
+    private Material ObtenerMaterialSuelo()
+    {
+        if (_materialSuelo != null)
+            return _materialSuelo;
+
+        Texture2D texSuelo = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/Vegetacion/ground.jpeg");
+        if (texSuelo != null)
+            _materialSuelo = ObtenerOCrearMaterial(texSuelo, null);
+        return _materialSuelo;
+    }
+
     private void CrearSuelo(GameObject contenedor)
     {
         GameObject suelo = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -126,8 +145,14 @@ public class GeneradorEscenario : EditorWindow
         suelo.transform.localScale = Vector3.one * tamanoEscenario / 10f;
         suelo.transform.position = new Vector3(tamanoEscenario / 2f, -0.05f, tamanoEscenario / 2f);
         Renderer r = suelo.GetComponent<Renderer>();
-        r.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-        r.sharedMaterial.color = new Color(0.12f, 0.1f, 0.07f);
+        Material mat = ObtenerMaterialSuelo();
+        if (mat != null)
+            r.sharedMaterial = mat;
+        else
+        {
+            r.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            r.sharedMaterial.color = new Color(0.12f, 0.1f, 0.07f);
+        }
     }
 
     private void GenerarCaminosRamificados(bool[,] esCamino, int n)
@@ -270,33 +295,69 @@ public class GeneradorEscenario : EditorWindow
 
     private void AsignarTexturaPorNombre(GameObject instancia, string nombreModelo)
     {
-        string rutaDiffuse = BuscarTexturaTGA(nombreModelo, "diffuse");
+        string rutaDiffuse = null;
+
+        if (RegexDetalle.IsMatch(nombreModelo))
+        {
+            string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { "Assets/Models/Vegetacion" });
+            foreach (string guid in guids)
+            {
+                string ruta = AssetDatabase.GUIDToAssetPath(guid);
+                if (System.IO.Path.GetFileNameWithoutExtension(ruta).ToLower() == "grass_diffuse")
+                {
+                    rutaDiffuse = ruta;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            rutaDiffuse = BuscarTexturaTGA(nombreModelo, "diffuse");
+        }
+
         if (rutaDiffuse == null) return;
 
         Texture2D texDiffuse = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaDiffuse);
         if (texDiffuse == null) return;
 
         string rutaNormal = BuscarTexturaTGA(nombreModelo, "normal");
+        Texture2D texNormal = null;
+        if (rutaNormal != null)
+            texNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaNormal);
+
+        Material materialGuardado = ObtenerOCrearMaterial(texDiffuse, texNormal);
 
         Renderer[] renderers = instancia.GetComponentsInChildren<Renderer>();
         foreach (Renderer r in renderers)
         {
-            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            mat.mainTexture = texDiffuse;
-            mat.color = Color.white;
-
-            if (rutaNormal != null)
-            {
-                Texture2D texNormal = AssetDatabase.LoadAssetAtPath<Texture2D>(rutaNormal);
-                if (texNormal != null)
-                {
-                    mat.SetTexture("_BumpMap", texNormal);
-                    mat.EnableKeyword("_NORMALMAP");
-                }
-            }
-
-            r.sharedMaterial = mat;
+            r.sharedMaterial = materialGuardado;
         }
+    }
+
+    private static Material ObtenerOCrearMaterial(Texture2D texDiffuse, Texture2D texNormal)
+    {
+        string nombreMaterial = texDiffuse.name;
+        string rutaCarpeta = "Assets/Materials/Generated";
+        string rutaMaterial = rutaCarpeta + "/" + nombreMaterial + ".mat";
+
+        System.IO.Directory.CreateDirectory(rutaCarpeta);
+
+        Material mat = AssetDatabase.LoadAssetAtPath<Material>(rutaMaterial);
+        if (mat != null)
+            return mat;
+
+        mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+        mat.mainTexture = texDiffuse;
+        mat.color = Color.white;
+
+        if (texNormal != null)
+        {
+            mat.SetTexture("_BumpMap", texNormal);
+            mat.EnableKeyword("_NORMALMAP");
+        }
+
+        AssetDatabase.CreateAsset(mat, rutaMaterial);
+        return mat;
     }
 
     private string BuscarTexturaTGA(string nombreModelo, string sufijo)
